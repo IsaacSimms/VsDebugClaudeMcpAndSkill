@@ -55,3 +55,10 @@ public static string ToolName(VsConnection vs, [Description("param help")] strin
 }
 ```
 The MCP SDK auto-discovers it via `WithToolsFromAssembly()`. No registration code needed.
+
+## Coding conventions
+For C# code:
+If we are beginning a function, class, or important block of code we want to give it a title with // == insert content == // as the convention
+for muiltiple lines or a longer message that is not the start of a funciton or block of code that needs a title, we can use // insert comment above the code in question
+If we are commenting on a single line of code we would like to put that comment in the same line as that code. We like to have space inbetween the code and the comment, 
+and we want those comments to line up with each other best they can. The comments lining up is not a hard fast rule. 
