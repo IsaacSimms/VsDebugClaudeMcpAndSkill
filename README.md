@@ -50,16 +50,19 @@ This makes VsBridge available to Claude Code in **every** project, with instant 
 
 **1. Clone and publish**
 
-```bash
+This publishes into your `.claude` folder, keeping all Claude Code tooling in one place:
+
+```powershell
+$installDir = "$env:USERPROFILE\.claude\VsBridge"
 git clone https://github.com/IsaacSimms/VsDebugClaudeMcpAndSkill.git
 cd VsDebugClaudeMcpAndSkill
-dotnet publish VsBridge/VsBridge.csproj -c Release -o C:\Tools\VsBridge
+dotnet publish VsBridge/VsBridge.csproj -c Release -o $installDir
 ```
 
 **2. Register with Claude Code**
 
-```bash
-claude mcp add vs-debugger -- C:\Tools\VsBridge\VsBridge.exe
+```powershell
+claude mcp add vs-debugger -- "$installDir\VsBridge.exe"
 ```
 
 Or add it manually to `~/.claude/settings.json`:
@@ -68,7 +71,7 @@ Or add it manually to `~/.claude/settings.json`:
 {
   "mcpServers": {
     "vs-debugger": {
-      "command": "C:\\Tools\\VsBridge\\VsBridge.exe"
+      "command": "C:\\Users\\YourName\\.claude\\VsBridge\\VsBridge.exe"
     }
   }
 }
