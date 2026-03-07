@@ -1,103 +1,126 @@
 # VsBridge
 
-An MCP server that gives Claude Code full control over the Visual Studio debugger. Set breakpoints, launch, step, inspect locals, evaluate expressions — all through natural language in your terminal.
+VsBridge is an MCP server that lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code) control the Visual Studio debugger. Once installed, Claude can set breakpoints, launch the debugger, step through code, inspect variables, and evaluate expressions — all from the terminal, against any project open in Visual Studio.
 
 ```
-Claude Code ──(MCP stdio)──> VsBridge.exe ──(COM / EnvDTE)──> Visual Studio
+Claude Code ──(MCP / stdio)──> VsBridge.exe ──(COM / EnvDTE)──> Visual Studio
 ```
 
-No VS extension needed. No Node.js. A single .NET 8 console app bridges Claude Code to any running instance of Visual Studio 2022 or 2026 via COM automation.
+No VS extension. No Node.js. One .NET 8 exe talks directly to Visual Studio via COM automation.
 
-## What It Does
-
-Ask Claude to debug your code, and it will:
-
-1. Connect to your running Visual Studio instance
-2. Set breakpoints where you tell it (or where it thinks the bug is)
-3. Launch the debugger (F5)
-4. Inspect locals, evaluate expressions, read the call stack
-5. Step through code line by line
-6. Report back what it found
-
-All 11 tools are exposed as MCP tools that Claude Code can call directly:
-
-| Tool | What It Does | Needs Break Mode |
-|---|---|:---:|
-| `vs_status`            | Debugger state, solution name, active breakpoints | |
-| `vs_launch`            | Start debugging (F5) or resume from break | |
-| `vs_stop`              | Stop debugging (Shift+F5) | |
-| `vs_set_breakpoint`    | Set breakpoint at file:line, optional condition | |
-| `vs_remove_breakpoint` | Remove breakpoint at file:line | |
-| `vs_get_locals`        | Local variables and values at current frame | ✓ |
-| `vs_evaluate`          | Evaluate any C# expression in context | ✓ |
-| `vs_step_over`         | Step over (F10) | ✓ |
-| `vs_step_into`         | Step into (F11) | ✓ |
-| `vs_step_out`          | Step out (Shift+F11) | ✓ |
-| `vs_get_callstack`     | Full call stack with module info | ✓ |
-
-## Prerequisites
+## Requirements
 
 - **Windows** — COM interop is Windows-only
 - **Visual Studio 2022 or 2026** — must be running with a solution open
 - **[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)** or later
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** CLI
+- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** CLI installed and authenticated
 
-## Installation
+## Install
 
-### Option A — Publish and register globally (recommended)
-
-This makes VsBridge available to Claude Code in **every** project, with instant startup.
-
-**1. Clone**
-
-````````powershell
-$installDir = "$env:USERPROFILE\.claude\VsBridge"
-git clone https://github.com/IsaacSimms/VsDebugClaudeMcpAndSkill.git
-cd VsDebugClaudeMcpAndSkill
-dotnet publish VsBridge/VsBridge.csproj -c Release -o $installDir
-```
-
-**2. Register with Claude Code**
+Clone the repo and run the install script. That's it.
 
 ```powershell
-claude mcp add vs-debugger -- "$installDir\VsBridge.exe"
-```
-
-Or add it manually to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "vs-debugger": {
-      "command": "C:\\Users\\YourName\\.claude\\VsBridge\\VsBridge.exe"
-    }
-  }
-}
-```
-
-**3. Install the skill (optional, recommended)**
-
-The skill file teaches Claude *when and how* to use the debugger tools:
-
-```bash
-cp SKILL.md ~/.claude/skills/vs-debugger.md
-```
-
-**Updating after code changes:** just run `.\install.ps1` again. The script stops any running VsBridge process automatically before overwriting the exe.
-
-### Option B — Run from source (per-project)
-
-If you prefer `dotnet run` (recompiles on each launch, adds a few seconds of startup):
-
-**1. Clone**
-
-```bash
 git clone https://github.com/IsaacSimms/VsDebugClaudeMcpAndSkill.git
+cd VsDebugClaudeMcpAndSkill
+.\install.ps1
 ```
 
-**2. Add `.mcp.json` to any project**
+The script output will look like this:
 
-Create a `.mcp.json` in the root of the project you want to debug:
+```
+=== VsBridge Install / Update ===
+  Publishing exe to C:\Users\YourName\.claude\VsBridge ...
+  Exe ready:     C:\Users\YourName\.claude\VsBridge\VsBridge.exe
+  Skill updated: C:\Users\YourName\.claude\skills\vs-debugger.md
+  MCP entry added to settings.json
+
+  Done. Restart Claude Code to pick up changes.
+```
+
+After it finishes, your `.claude` folder will contain:
+
+```
+~/.claude/
+├── VsBridge/
+│   └── VsBridge.exe          ← the MCP server Claude Code will launch
+├── skills/
+│   └── vs-debugger.md        ← teaches Claude when and how to use the tools
+└── settings.json             ← vs-debugger entry added here automatically
+```
+
+**Then restart Claude Code.** The MCP server starts automatically when Claude Code launches.
+
+> **Note:** Visual Studio and the terminal running Claude Code must be at the **same elevation level** — both normal user, or both admin. COM access across elevation boundaries will fail.
+
+## Verify It Works
+
+Open a solution in Visual Studio, then in Claude Code ask:
+
+```
+check the status of my visual studio debugger
+```
+
+Expected response:
+
+```
+Debugger Mode: Design (not debugging)
+Solution: C:\Projects\MyApp\MyApp.sln
+```
+
+If you see that, VsBridge is connected and ready.
+
+## Usage
+
+Just ask Claude naturally:
+
+```
+There's a bug in OrderService around line 47. Set a breakpoint there,
+launch the debugger, and tell me what's null when it hits.
+```
+
+```
+Step through the CalculateTotal method and show me how the
+running total changes on each loop iteration.
+```
+
+```
+Set a breakpoint at Startup.cs:23, launch, and evaluate
+Configuration["ConnectionStrings:Default"] when it pauses.
+```
+
+Claude will call the appropriate tools in sequence automatically.
+
+### Tools
+
+| Tool | What It Does | Requires Break Mode |
+|---|---|:---:|
+| `vs_status` | Debugger state, solution name, active breakpoints | |
+| `vs_launch` | Start debugging (F5) or resume from break | |
+| `vs_stop` | Stop debugging (Shift+F5) | |
+| `vs_set_breakpoint` | Set breakpoint at file:line, optional condition | |
+| `vs_remove_breakpoint` | Remove breakpoint at file:line | |
+| `vs_get_locals` | Local variables and values at current frame | ✓ |
+| `vs_evaluate` | Evaluate any C# expression | ✓ |
+| `vs_step_over` | Step over (F10) | ✓ |
+| `vs_step_into` | Step into (F11) | ✓ |
+| `vs_step_out` | Step out (Shift+F11) | ✓ |
+| `vs_get_callstack` | Full call stack with module info | ✓ |
+
+"Break mode" means the debugger is paused — at a breakpoint, or after a step command.
+
+## Updating
+
+After pulling new changes, just run the install script again:
+
+```powershell
+.\install.ps1
+```
+
+It stops any running VsBridge process before overwriting the exe, so there's no need to close Claude Code first. Restart Claude Code once the script finishes.
+
+## Per-Project Use (Alternative)
+
+If you want VsBridge only for a specific project instead of globally, add a `.mcp.json` to that project's root:
 
 ```json
 {
@@ -110,110 +133,34 @@ Create a `.mcp.json` in the root of the project you want to debug:
 }
 ```
 
-Replace `C:\\path\\to\\` with the actual path where you cloned the repo.
-
-## Verify It Works
-
-1. Open any solution in Visual Studio
-2. Open Claude Code in a terminal
-3. Ask:
-
-```
-Check the status of my Visual Studio debugger
-```
-
-You should see output like:
-
-```
-Debugger Mode: Design (not debugging)
-Solution: C:\Projects\MyApp\MyApp.sln
-```
-
-## Usage
-
-### Ask Claude naturally
-
-```
-> There's a NullReferenceException in OrderService.ProcessOrder around line 47.
-  Set a breakpoint there, launch the debugger, and tell me what's null.
-```
-
-```
-> Step through the CalculateTotal method and show me how the discount
-  variable changes on each iteration.
-```
-
-```
-> Run the app with a breakpoint at Startup.cs:23 and evaluate
-  Configuration["ConnectionStrings:Default"] when it hits.
-```
-
-### Or use the explicit workflow
-
-1. `vs_status` — check VS is connected and see current state
-2. `vs_set_breakpoint` — place breakpoints at lines of interest
-3. `vs_launch` — start debugging (F5)
-4. `vs_get_locals` — inspect local variables when paused
-5. `vs_evaluate` — evaluate expressions like `myList.Count`, `customer?.Name`
-6. `vs_get_callstack` — see how execution reached the current point
-7. `vs_step_over` / `vs_step_into` / `vs_step_out` — navigate code
-8. `vs_stop` — end the debug session
-
-## Important: Elevation Must Match
-
-Visual Studio and the terminal running Claude Code **must run at the same elevation level** — either both as admin, or both as a normal user. If they don't match, COM access will fail with a connection error.
-
-## Architecture
-
-```
-┌─────────────┐     JSON-RPC      ┌──────────────┐    COM/STA     ┌──────────────────┐
-│ Claude Code  │ ◄──(stdin/out)──► │  VsBridge    │ ◄────────────► │ Visual Studio    │
-│  (MCP client)│                   │  (MCP server)│                │ (DTE2 via EnvDTE)│
-└─────────────┘                   └──────────────┘                └──────────────────┘
-```
-
-| File | Purpose |
-|---|---|
-| `Program.cs`       | MCP host — stdio transport, DI wiring |
-| `DebuggerTools.cs` | 11 MCP tools as `[McpServerTool]` static methods |
-| `VsConnection.cs`  | DTE2 lifecycle — lazy connect, auto-reconnect on VS restart |
-| `StaDispatcher.cs` | Dedicated STA thread — marshals all COM calls from MTA pool |
-| `ComHelper.cs`     | P/Invoke wrappers, Running Object Table enumeration |
-
-Key design decisions:
-
-- **STA threading** — EnvDTE COM objects require STA. The MCP SDK dispatches on thread pool (MTA) threads. `StaDispatcher` bridges the two with a dedicated STA thread and a blocking queue.
-- **`Host.CreateEmptyApplicationBuilder`** — avoids the default host's console logging, which would corrupt the MCP stdio JSON-RPC transport.
-- **Tools never throw** — every tool catches exceptions and returns an error string, so Claude always gets a usable response.
-- **Auto-reconnect** — if Visual Studio restarts mid-session, VsBridge detects the stale COM reference and reconnects on the next tool call.
+This uses `dotnet run` and recompiles on each launch (a few seconds of startup delay). The global install from `install.ps1` is faster and available in every project.
 
 ## Troubleshooting
 
-| Problem | Solution |
+| Problem | Fix |
 |---|---|
 | "Visual Studio is not running" | Open VS with a solution loaded before calling any tools |
-| Connection error / COM failure | Ensure VS and your terminal share the same elevation (both admin or both normal) |
-| Tools hang or time out         | A COM call may be blocked — restart VS and try again |
-| "Debugger is not paused"       | Inspection tools require break mode. Set a breakpoint with `vs_set_breakpoint`, then `vs_launch` |
-| Wrong VS instance connects     | VsBridge picks the newest version. Close other VS instances to target a specific one |
-| `dotnet run` startup is slow   | Use Option A (publish to exe) for instant startup |
-| MCP server not found by Claude | Verify `.mcp.json` path is absolute, or use `claude mcp add` for global registration |
+| COM error / can't connect | Make sure VS and your terminal are at the same elevation (both admin or both not) |
+| Tools hang or time out | A COM call may be stuck — restart VS and try again |
+| "Debugger is not paused" | Use `vs_set_breakpoint` + `vs_launch` first — inspection tools only work when paused |
+| Wrong VS instance connects | VsBridge picks the newest VS version — close other instances to target a specific one |
+| MCP server not found after install | Confirm `~/.claude/settings.json` has the `vs-debugger` entry, then restart Claude Code |
 
 ## Running Tests
 
-```bash
+```powershell
 dotnet test
 ```
 
-All 33 tests use Moq to mock EnvDTE COM interfaces — no running Visual Studio instance required.
+All 33 tests mock the EnvDTE COM interfaces with Moq — no running Visual Studio required.
 
 ## Adding a New Tool
 
 Add a static method to `DebuggerTools.cs`:
 
 ```csharp
-[McpServerTool(Name = "vs_tool_name"), Description("Description for Claude")]
-public static string ToolName(VsConnection vs, [Description("param help")] string param)
+[McpServerTool(Name = "vs_my_tool"), Description("What this tool does")]
+public static string MyTool(VsConnection vs, [Description("param description")] string param)
 {
     try
     {
@@ -230,12 +177,10 @@ public static string ToolName(VsConnection vs, [Description("param help")] strin
 }
 ```
 
-The MCP SDK auto-discovers it via `WithToolsFromAssembly()`. No registration needed.
+`WithToolsFromAssembly()` in `Program.cs` discovers it automatically — no registration needed. Then run `.\install.ps1` to deploy the updated exe.
 
 ## License
 
 MIT
-
-The script handles everything — publishing the exe, installing the skill, and registering the MCP server in `~/.claude/settings.json`. It is safe to run again after any update to the project.
 
 After running, your `.claude` folder will contain:

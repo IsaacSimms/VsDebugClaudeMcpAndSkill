@@ -1,11 +1,12 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "mcp__vs-debugger__vs_set_breakpoint"
+    ]
+  },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "vs-debugger"
-  ],
-  "permissions": {
-    "allow": [
-      "Bash(dotnet build:*)"
-    ]
-  }
+  ]
 }
