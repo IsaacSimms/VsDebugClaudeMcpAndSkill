@@ -1,13 +1,22 @@
+// <summary>
+// Manages the long-lived COM connection to a running Visual Studio instance.
+// All DTE calls are marshaled through StaDispatcher.
+//
+// Important blocks:
+//   - GetDte / GetDteOnStaThread: lazy connect with stale-connection recovery
+//   - Execute: thread-safe wrapper used by all MCP tools
+//   - EnsureBreakMode: guard — throws if debugger isn't paused
+//   - WaitForBreakMode: polls 100ms intervals (up to 3s) after step commands
+//   - GetCurrentLocation: extracts file:line from active document / stack frame
+// </summary>
+
 using System.Runtime.InteropServices;
 using EnvDTE;
 using EnvDTE80;
 
 namespace VsBridge;
 
-/// <summary>
-/// Manages the COM connection to a running Visual Studio instance.
-/// All COM calls are marshaled through the StaDispatcher.
-/// </summary>
+// == VsConnection — DTE2 lifecycle and thread-safe execution == //
 public sealed class VsConnection
 {
     private readonly StaDispatcher _sta;
@@ -18,9 +27,7 @@ public sealed class VsConnection
         _sta = sta;
     }
 
-    /// <summary>
-    /// Get the DTE2 instance, connecting or reconnecting as needed.
-    /// </summary>
+    // == GetDte — connect or reconnect on STA thread == //
     public DTE2 GetDte()
     {
         return _sta.Invoke(() =>
@@ -29,13 +36,12 @@ public sealed class VsConnection
             {
                 try
                 {
-                    // Test if the connection is still alive
-                    _ = _dte.Version;
+                    _ = _dte.Version;               // Liveness check
                     return _dte;
                 }
                 catch (COMException)
                 {
-                    _dte = null; // Stale connection, reconnect
+                    _dte = null;                    // Stale connection, reconnect
                 }
             }
 
@@ -48,26 +54,19 @@ public sealed class VsConnection
         });
     }
 
-    /// <summary>
-    /// Execute a function against the DTE on the STA thread.
-    /// </summary>
+    // == Execute<T> — run func against DTE on STA thread == //
     public T Execute<T>(Func<DTE2, T> func)
     {
         return _sta.Invoke(() => func(GetDteOnStaThread()));
     }
 
-    /// <summary>
-    /// Execute an action against the DTE on the STA thread.
-    /// </summary>
+    // == Execute — action overload (no return value) == //
     public void Execute(Action<DTE2> action)
     {
         _sta.Invoke(() => action(GetDteOnStaThread()));
     }
 
-    /// <summary>
-    /// Throws if the debugger is not in break mode.
-    /// Must be called from the STA thread (inside Execute).
-    /// </summary>
+    // == EnsureBreakMode — guard, throws if debugger not paused == //
     public static void EnsureBreakMode(DTE2 dte)
     {
         if (dte.Debugger.CurrentMode != dbgDebugMode.dbgBreakMode)
@@ -76,16 +75,13 @@ public sealed class VsConnection
                 "Use vs_set_breakpoint and vs_launch first.");
     }
 
-    /// <summary>
-    /// Waits briefly for the debugger to enter break mode after a step command.
-    /// Must be called from the STA thread.
-    /// </summary>
+    // == WaitForBreakMode — polls until debugger settles into break mode == //
     public static bool WaitForBreakMode(DTE2 dte, int maxWaitMs = 3000)
     {
         int waited = 0;
         while (waited < maxWaitMs)
         {
-            System.Threading.Thread.Sleep(100);
+            System.Threading.Thread.Sleep(100);     // 100ms polling interval
             waited += 100;
             try
             {
@@ -97,10 +93,7 @@ public sealed class VsConnection
         return false;
     }
 
-    /// <summary>
-    /// Gets the current source location string if in break mode.
-    /// Must be called from the STA thread.
-    /// </summary>
+    // == GetCurrentLocation — file:line in func string from active context == //
     public static string GetCurrentLocation(DTE2 dte)
     {
         try
@@ -118,7 +111,7 @@ public sealed class VsConnection
             try
             {
                 file = dte.Debugger.CurrentProgram?.Name ?? "";
-                // Try to get file/line from the current stack frame document context
+                // Try to resolve file/line from the active document context
                 var doc = dte.ActiveDocument;
                 if (doc is not null)
                 {
@@ -138,18 +131,19 @@ public sealed class VsConnection
         }
     }
 
+    // == GetDteOnStaThread — private reconnect (assumes already on STA) == //
     private DTE2 GetDteOnStaThread()
     {
         if (_dte is not null)
         {
             try
             {
-                _ = _dte.Version;
+                _ = _dte.Version;                   // Liveness check
                 return _dte;
             }
             catch (COMException)
             {
-                _dte = null;
+                _dte = null;                        // Stale, reconnect
             }
         }
 

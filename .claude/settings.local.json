@@ -1,0 +1,11 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "vs-debugger"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)"
+    ]
+  }
+}

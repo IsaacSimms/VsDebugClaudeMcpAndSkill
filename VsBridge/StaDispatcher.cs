@@ -1,17 +1,24 @@
+// <summary>
+// Dispatches work to a dedicated STA thread for COM interop with EnvDTE.
+// MCP requests arrive on thread-pool (MTA) threads — COM objects require STA.
+//
+// Important blocks:
+//   - RunLoop: consumes queued actions on the STA thread
+//   - Invoke<T>: posts work, blocks caller, re-throws exceptions preserving stack trace
+//   - Timeout guard: defaults to 15s to prevent deadlocks
+// </summary>
+
 using System.Collections.Concurrent;
 
 namespace VsBridge;
 
-/// <summary>
-/// Dispatches work to a dedicated STA thread, required for COM interop with EnvDTE.
-/// The MCP SDK processes requests on thread pool threads (MTA), but COM objects
-/// like EnvDTE require STA apartment state.
-/// </summary>
+// == StaDispatcher == //
 public sealed class StaDispatcher : IDisposable
 {
     private readonly BlockingCollection<Action> _queue = new();
     private readonly Thread _staThread;
 
+    // == Constructor — spawns STA thread == //
     public StaDispatcher()
     {
         _staThread = new Thread(RunLoop)
@@ -23,6 +30,7 @@ public sealed class StaDispatcher : IDisposable
         _staThread.Start();
     }
 
+    // == RunLoop — STA thread main loop == //
     private void RunLoop()
     {
         foreach (var action in _queue.GetConsumingEnumerable())
@@ -31,13 +39,11 @@ public sealed class StaDispatcher : IDisposable
         }
     }
 
-    /// <summary>
-    /// Execute a function on the STA thread and return its result.
-    /// </summary>
+    // == Invoke<T> — execute func on STA thread, return result == //
     public T Invoke<T>(Func<T> func, int timeoutMs = 15000)
     {
         if (Thread.CurrentThread == _staThread)
-            return func();
+            return func();                          // Already on STA, run directly
 
         T result = default!;
         Exception? exception = null;
@@ -51,7 +57,7 @@ public sealed class StaDispatcher : IDisposable
             }
             catch (Exception ex)
             {
-                exception = ex;
+                exception = ex;                     // Capture for re-throw on caller thread
             }
             finally
             {
@@ -62,20 +68,20 @@ public sealed class StaDispatcher : IDisposable
         if (!done.Wait(timeoutMs))
             throw new TimeoutException($"STA dispatch timed out after {timeoutMs}ms");
 
+        // Re-throw preserving original stack trace
         if (exception is not null)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(exception).Throw();
 
         return result;
     }
 
-    /// <summary>
-    /// Execute an action on the STA thread.
-    /// </summary>
+    // == Invoke — action overload (no return value) == //
     public void Invoke(Action action, int timeoutMs = 15000)
     {
         Invoke(() => { action(); return 0; }, timeoutMs);
     }
 
+    // == Dispose — signal queue completion, join STA thread == //
     public void Dispose()
     {
         _queue.CompleteAdding();

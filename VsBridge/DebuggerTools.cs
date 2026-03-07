@@ -1,3 +1,22 @@
+// <summary>
+// MCP tool definitions — exposes VS debugger operations to MCP clients.
+// Each static method is a tool callable over JSON-RPC via VsConnection.Execute.
+// All tools return error strings on failure (never throw).
+//
+// Tools:
+//   - vs_status:            debugger mode, solution, breakpoints
+//   - vs_launch:            start/resume debugging (F5)
+//   - vs_stop:              stop debugging (Shift+F5)
+//   - vs_set_breakpoint:    set breakpoint at file:line, optional condition
+//   - vs_remove_breakpoint: remove breakpoint at file:line
+//   - vs_get_locals:        local variables at current stack frame
+//   - vs_evaluate:          evaluate C# expression in debug context
+//   - vs_step_over:         F10
+//   - vs_step_into:         F11
+//   - vs_step_out:          Shift+F11
+//   - vs_get_callstack:     full call stack with module info
+// </summary>
+
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -7,9 +26,11 @@ using ModelContextProtocol.Server;
 
 namespace VsBridge;
 
+// == DebuggerTools — MCP tool surface area == //
 [McpServerToolType]
 public sealed class DebuggerTools
 {
+    // == vs_status — report debugger state, solution, breakpoints == //
     [McpServerTool(Name = "vs_status"), Description(
         "Check the current state of the Visual Studio debugger. Returns whether VS is in design mode " +
         "(not debugging), run mode (running), or break mode (paused at breakpoint/step). Also returns " +
@@ -24,9 +45,9 @@ public sealed class DebuggerTools
                 var mode = dte.Debugger.CurrentMode switch
                 {
                     dbgDebugMode.dbgDesignMode => "Design (not debugging)",
-                    dbgDebugMode.dbgRunMode => "Running",
-                    dbgDebugMode.dbgBreakMode => "Break (paused)",
-                    _ => "Unknown"
+                    dbgDebugMode.dbgRunMode    => "Running",
+                    dbgDebugMode.dbgBreakMode  => "Break (paused)",
+                    _                          => "Unknown"
                 };
 
                 var sb = new StringBuilder();
@@ -61,6 +82,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_launch — start debugging or resume from break == //
     [McpServerTool(Name = "vs_launch"), Description(
         "Start debugging the current project in Visual Studio (equivalent to pressing F5). " +
         "The startup project must be set in the solution. If breakpoints are set, execution will " +
@@ -77,12 +99,20 @@ public sealed class DebuggerTools
 
                 if (dte.Debugger.CurrentMode == dbgDebugMode.dbgBreakMode)
                 {
-                    dte.Debugger.Go(false);
+                    dte.Debugger.Go(false);         // Resume from break
                     return "Resumed execution from break mode.";
                 }
 
-                dte.Debugger.Go(false);
-                return "Debugging started (F5).";
+                dte.Debugger.Go(false);             // Start fresh (F5)
+
+                // Wait a bit for a breakpoint to hit so we can report the location
+                if (VsConnection.WaitForBreakMode(dte, maxWaitMs: 5000))
+                {
+                    var location = VsConnection.GetCurrentLocation(dte);
+                    return $"Debugging started. Hit breakpoint.{(string.IsNullOrEmpty(location) ? "" : $" Paused at: {location}")}";
+                }
+
+                return "Debugging started (F5). Running — use vs_status to check state.";
             });
         }
         catch (Exception ex)
@@ -91,6 +121,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_stop — stop debugging session == //
     [McpServerTool(Name = "vs_stop"), Description(
         "Stop the current debugging session in Visual Studio (equivalent to Shift+F5). " +
         "Use this when you're done debugging or want to restart.")]
@@ -113,6 +144,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_set_breakpoint — set breakpoint at file:line with optional condition == //
     [McpServerTool(Name = "vs_set_breakpoint"), Description(
         "Set a breakpoint in Visual Studio at a specific file and line number. The file can be " +
         "a full path (e.g. C:\\Projects\\MyApp\\MyService.cs) or just the filename (e.g. MyService.cs) " +
@@ -150,6 +182,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_remove_breakpoint — remove breakpoint at file:line == //
     [McpServerTool(Name = "vs_remove_breakpoint"), Description(
         "Remove a breakpoint at a specific file and line number in Visual Studio.")]
     public static string RemoveBreakpoint(
@@ -162,7 +195,7 @@ public sealed class DebuggerTools
             return vs.Execute(dte =>
             {
                 int removed = 0;
-                // Iterate in reverse to safely delete
+                // Reverse iterate to safely delete without index shifting
                 for (int i = dte.Debugger.Breakpoints.Count; i >= 1; i--)
                 {
                     var bp = dte.Debugger.Breakpoints.Item(i);
@@ -187,6 +220,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_get_locals — local variables at current execution point == //
     [McpServerTool(Name = "vs_get_locals"), Description(
         "Get the local variables and their values at the current execution point. Only works when " +
         "the debugger is paused (break mode). Returns variable names, types, and current values. " +
@@ -223,6 +257,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_evaluate — evaluate C# expression in debug context == //
     [McpServerTool(Name = "vs_evaluate"), Description(
         "Evaluate a C# expression in the current debugging context. Only works when the debugger " +
         "is paused (break mode). Can evaluate variables, properties, method calls, LINQ expressions, " +
@@ -250,6 +285,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_step_over — F10 == //
     [McpServerTool(Name = "vs_step_over"), Description(
         "Step over the current line of code (equivalent to F10). Executes the current line and " +
         "pauses at the next line in the same method. Only works when the debugger is paused.")]
@@ -272,6 +308,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_step_into — F11 == //
     [McpServerTool(Name = "vs_step_into"), Description(
         "Step into the current method call (equivalent to F11). If the current line contains a " +
         "method call, enters that method. Only works when the debugger is paused.")]
@@ -294,6 +331,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_step_out — Shift+F11 == //
     [McpServerTool(Name = "vs_step_out"), Description(
         "Step out of the current method (equivalent to Shift+F11). Continues execution until the " +
         "current method returns, then pauses at the calling line. Only works when the debugger is paused.")]
@@ -316,6 +354,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == vs_get_callstack — full call stack with module info == //
     [McpServerTool(Name = "vs_get_callstack"), Description(
         "Get the current call stack showing the chain of method calls that led to the current " +
         "execution point. Only works when the debugger is paused (break mode). Shows function names, " +
@@ -338,11 +377,10 @@ public sealed class DebuggerTools
                 int i = 0;
                 foreach (StackFrame frame in thread.StackFrames)
                 {
-                    string marker = i == 0 ? " >> " : "    ";
+                    string marker = i == 0 ? " >> " : "    "; // >> marks current frame
                     sb.AppendLine($"{marker}{frame.FunctionName}");
                     try
                     {
-                        // Try to get file info if available
                         string module = frame.Module;
                         if (!string.IsNullOrEmpty(module))
                             sb.AppendLine($"       Module: {module}");
@@ -360,6 +398,7 @@ public sealed class DebuggerTools
         }
     }
 
+    // == AppendExpression — recursively format Expression tree for locals == //
     private static void AppendExpression(StringBuilder sb, Expression expr, int indent, int maxDepth)
     {
         string pad = new(' ', indent * 2);

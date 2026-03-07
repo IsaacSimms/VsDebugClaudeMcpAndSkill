@@ -3,8 +3,10 @@ using System.Runtime.InteropServices.ComTypes;
 
 namespace VsBridge;
 
+// == ComHelper — COM interop utilities == //
 internal static class ComHelper
 {
+    // == P/Invoke declarations == //
     [DllImport("ole32.dll")]
     private static extern int CLSIDFromProgID(
         [MarshalAs(UnmanagedType.LPWStr)] string lpszProgID,
@@ -22,6 +24,7 @@ internal static class ComHelper
     [DllImport("ole32.dll")]
     private static extern int CreateBindCtx(int reserved, out IBindCtx ppbc);
 
+    // == GetActiveObject — replaces Marshal.GetActiveObject (removed in .NET Core) == //
     /// <summary>
     /// Replacement for Marshal.GetActiveObject which was removed in .NET Core.
     /// </summary>
@@ -33,6 +36,7 @@ internal static class ComHelper
         return obj;
     }
 
+    // == FindDteInstance — returns newest running VS DTE == //
     /// <summary>
     /// Finds the best available Visual Studio DTE instance.
     /// Prefers VS 2026 (18.0), falls back to VS 2022 (17.0).
@@ -41,14 +45,14 @@ internal static class ComHelper
     {
         var instances = EnumerateVsInstances();
 
-        // Prefer VS 2026, then VS 2022
         var best = instances
-            .OrderByDescending(i => i.Version)
+            .OrderByDescending(i => i.Version)      // Prefer VS 2026, then VS 2022
             .FirstOrDefault();
 
         return best?.Dte;
     }
 
+    // == EnumerateVsInstances — walks ROT for VS DTE entries == //
     /// <summary>
     /// Enumerates all running Visual Studio instances from the Running Object Table.
     /// </summary>
@@ -68,14 +72,14 @@ internal static class ComHelper
             CreateBindCtx(0, out IBindCtx ctx);
             monikers[0].GetDisplayName(ctx, null, out string displayName);
 
-            // ROT entries for VS look like: !VisualStudio.DTE.17.0:12345
+            // ROT entries look like: !VisualStudio.DTE.17.0:12345
             if (!displayName.StartsWith("!VisualStudio.DTE.")) continue;
 
             try
             {
                 rot.GetObject(monikers[0], out object obj);
 
-                // Parse version from display name (e.g., "17.0" from "!VisualStudio.DTE.17.0:12345")
+                // Parse version from display name (e.g. "17.0" from "!VisualStudio.DTE.17.0:12345")
                 var versionStr = displayName.Split(':')[0].Replace("!VisualStudio.DTE.", "");
                 if (double.TryParse(versionStr, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double version))
@@ -98,4 +102,5 @@ internal static class ComHelper
     }
 }
 
+// == VsInstance — lightweight record for a discovered VS instance == //
 internal record VsInstance(object Dte, double Version, string DisplayName, string SolutionPath);

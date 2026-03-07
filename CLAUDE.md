@@ -56,6 +56,16 @@ public static string ToolName(VsConnection vs, [Description("param help")] strin
 ```
 The MCP SDK auto-discovers it via `WithToolsFromAssembly()`. No registration code needed.
 
+## When to Use the VS Debugger
+
+When investigating bugs, unexpected behavior, or test failures in C# code, **use the vs-debugger MCP tools** to debug interactively through Visual Studio rather than guessing at the problem. This is especially valuable when:
+- A bug's root cause isn't obvious from reading the code
+- You need to inspect runtime state (variable values, object contents, collection sizes)
+- You want to verify a fix hypothesis before modifying code
+- A test is failing and you need to see what's actually happening at runtime
+
+**Workflow:** Call `vs_status` to confirm VS is connected. Set breakpoints with `vs_set_breakpoint` at the relevant lines, then `vs_launch` to start debugging. Once paused, use `vs_get_locals`, `vs_evaluate`, and `vs_get_callstack` to understand the state. Step through with `vs_step_over`/`vs_step_into`/`vs_step_out`. Call `vs_stop` when done.
+
 ## Coding conventions
 For C# code:
 If we are beginning a function, class, or important block of code we want to give it a title with // == insert content == // as the convention
