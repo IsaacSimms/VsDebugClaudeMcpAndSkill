@@ -48,11 +48,9 @@ All 11 tools are exposed as MCP tools that Claude Code can call directly:
 
 This makes VsBridge available to Claude Code in **every** project, with instant startup.
 
-**1. Clone and publish**
+**1. Clone**
 
-This publishes into your `.claude` folder, keeping all Claude Code tooling in one place:
-
-```powershell
+````````powershell
 $installDir = "$env:USERPROFILE\.claude\VsBridge"
 git clone https://github.com/IsaacSimms/VsDebugClaudeMcpAndSkill.git
 cd VsDebugClaudeMcpAndSkill
@@ -84,6 +82,8 @@ The skill file teaches Claude *when and how* to use the debugger tools:
 ```bash
 cp SKILL.md ~/.claude/skills/vs-debugger.md
 ```
+
+**Updating after code changes:** just run `.\install.ps1` again. The script stops any running VsBridge process automatically before overwriting the exe.
 
 ### Option B — Run from source (per-project)
 
@@ -235,3 +235,7 @@ The MCP SDK auto-discovers it via `WithToolsFromAssembly()`. No registration nee
 ## License
 
 MIT
+
+The script handles everything — publishing the exe, installing the skill, and registering the MCP server in `~/.claude/settings.json`. It is safe to run again after any update to the project.
+
+After running, your `.claude` folder will contain:
