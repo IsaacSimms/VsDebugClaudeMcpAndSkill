@@ -4,7 +4,7 @@
 
 $installDir   = "$env:USERPROFILE\.claude\VsBridge"
 $settingsDir  = "$env:USERPROFILE\.claude"
-$settingsFile = "$settingsDir\settings.json"
+$mcpFile      = "$settingsDir\.mcp.json"
 $skillsDir    = "$settingsDir\skills"
 $exePath      = "$installDir\VsBridge.exe"
 $csproj       = "$PSScriptRoot\VsBridge\VsBridge.csproj"
@@ -40,40 +40,39 @@ if (-not (Test-Path $skillsDir)) { New-Item -ItemType Directory -Force $skillsDi
 Copy-Item $skillSrc $skillDest -Force
 Write-Host "  Skill updated: $skillDest" -ForegroundColor Green
 
-# == Register in settings.json — works on first install and re-runs == //
-# Read existing settings or start from an empty object
-if (Test-Path $settingsFile)
+# == Register in .mcp.json — the global MCP config Claude Code reads == //
+# Read existing config or start from an empty object
+if (Test-Path $mcpFile)
 {
-    $settings = Get-Content $settingsFile -Raw | ConvertFrom-Json
+    $mcpConfig = Get-Content $mcpFile -Raw | ConvertFrom-Json
 }
 else
 {
-    # First install — settings.json doesn't exist yet
-    Write-Host "  No settings.json found, creating one..." -ForegroundColor Yellow
-    $settings = [PSCustomObject]@{}
+    Write-Host "  No .mcp.json found, creating one..." -ForegroundColor Yellow
+    $mcpConfig = [PSCustomObject]@{}
 }
 
 # Add mcpServers node if missing
-if (-not ($settings.PSObject.Properties.Name -contains "mcpServers"))
+if (-not ($mcpConfig.PSObject.Properties.Name -contains "mcpServers"))
 {
-    $settings | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
+    $mcpConfig | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
 }
 
 # Add or overwrite the vs-debugger entry
-$entry = [PSCustomObject]@{ command = $exePath }
-if ($settings.mcpServers.PSObject.Properties.Name -contains "vs-debugger")
+$entry = [PSCustomObject]@{ command = $exePath; args = @() }
+if ($mcpConfig.mcpServers.PSObject.Properties.Name -contains "vs-debugger")
 {
-    $settings.mcpServers."vs-debugger" = $entry
-    Write-Host "  MCP entry updated in settings.json" -ForegroundColor Green
+    $mcpConfig.mcpServers."vs-debugger" = $entry
+    Write-Host "  MCP entry updated in .mcp.json" -ForegroundColor Green
 }
 else
 {
-    $settings.mcpServers | Add-Member -NotePropertyName "vs-debugger" -NotePropertyValue $entry
-    Write-Host "  MCP entry added to settings.json" -ForegroundColor Green
+    $mcpConfig.mcpServers | Add-Member -NotePropertyName "vs-debugger" -NotePropertyValue $entry
+    Write-Host "  MCP entry added to .mcp.json" -ForegroundColor Green
 }
 
 # Write back with readable indentation
-$settings | ConvertTo-Json -Depth 10 | Set-Content $settingsFile -Encoding UTF8
+$mcpConfig | ConvertTo-Json -Depth 10 | Set-Content $mcpFile -Encoding UTF8
 
 Write-Host ""
 Write-Host "  Done. Restart Claude Code to pick up changes." -ForegroundColor Green

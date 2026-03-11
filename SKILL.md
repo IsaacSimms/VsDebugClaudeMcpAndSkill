@@ -1,6 +1,6 @@
 # Visual Studio Debugger Skill
 
-When debugging C# code, use the vs-debugger MCP tools to control Visual Studio's debugger directly.
+When debugging code in Visual Studio, use the vs-debugger MCP tools to control the debugger directly. This works for any language VS can debug (C#, C++, Python, TypeScript, etc.).
 
 ## Available Tools
 
