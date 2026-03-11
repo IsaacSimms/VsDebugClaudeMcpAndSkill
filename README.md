@@ -34,7 +34,7 @@ cd VsDebugClaudeMcpAndSkill
 The script will:
 1. Build and publish `VsBridge.exe` to `~/.claude/VsBridge/`
 2. Copy the skill file to `~/.claude/skills/vs-debugger.md`
-3. Register the MCP server in `~/.claude/.mcp.json`
+3. Register the MCP server globally via `claude mcp add` (user scope in `~/.claude.json`)
 
 Output looks like this:
 
@@ -43,7 +43,8 @@ Output looks like this:
   Publishing exe to C:\Users\YourName\.claude\VsBridge ...
   Exe ready:     C:\Users\YourName\.claude\VsBridge\VsBridge.exe
   Skill updated: C:\Users\YourName\.claude\skills\vs-debugger.md
-  MCP entry added to .mcp.json
+  Registering MCP server (user scope)...
+  MCP server registered globally
 
   Done. Restart Claude Code to pick up changes.
 ```
@@ -62,20 +63,13 @@ dotnet publish VsBridge/VsBridge.csproj -c Release -o "$env:USERPROFILE\.claude\
 
 **2. Register the MCP server**
 
-Add the `vs-debugger` entry to your global Claude Code MCP config at `~/.claude/.mcp.json`. Create the file if it doesn't exist:
+Use the Claude Code CLI to register VsBridge as a global (user-scoped) MCP server:
 
-```json
-{
-  "mcpServers": {
-    "vs-debugger": {
-      "command": "C:\\Users\\YourName\\.claude\\VsBridge\\VsBridge.exe",
-      "args": []
-    }
-  }
-}
+```powershell
+claude mcp add --transport stdio --scope user vs-debugger -- "$env:USERPROFILE\.claude\VsBridge\VsBridge.exe"
 ```
 
-Replace `YourName` with your Windows username. If the file already has other MCP servers, add `vs-debugger` alongside them inside `mcpServers`.
+This writes the server entry into `~/.claude.json`, making it available in every project.
 
 **3. Install the skill file (optional but recommended)**
 
@@ -88,15 +82,15 @@ copy SKILL.md "$env:USERPROFILE\.claude\skills\vs-debugger.md"
 
 ### After install
 
-Your `~/.claude/` folder should now contain:
+Your files should now look like:
 
 ```
+~/.claude.json                  ← vs-debugger MCP server registered here (user scope)
 ~/.claude/
-├── .mcp.json               ← vs-debugger MCP server registered here
 ├── VsBridge/
-│   └── VsBridge.exe         ← the MCP server binary
+│   └── VsBridge.exe            ← the MCP server binary
 └── skills/
-    └── vs-debugger.md       ← teaches Claude the debugging workflow
+    └── vs-debugger.md          ← teaches Claude the debugging workflow
 ```
 
 **Restart Claude Code** for the changes to take effect. The MCP server starts automatically when Claude Code launches.
@@ -223,7 +217,7 @@ Or, if you haven't published the exe and want to build on the fly (slower startu
 | Tools hang or time out | A COM call may be stuck — restart VS and try again |
 | "Debugger is not paused" | Use `vs_set_breakpoint` + `vs_launch` first — inspection tools only work in break mode |
 | Wrong VS instance connects | VsBridge picks the newest VS version; close other instances to target a specific one |
-| MCP server not listed in `/mcp` | Check that `~/.claude/.mcp.json` has the `vs-debugger` entry, then restart Claude Code |
+| MCP server not listed in `/mcp` | Run `claude mcp list` to verify registration, or re-add with `claude mcp add --transport stdio --scope user vs-debugger -- path\to\VsBridge.exe`, then restart Claude Code |
 | Server listed but not connecting | Run `VsBridge.exe` manually in a terminal to check for startup errors |
 
 ---

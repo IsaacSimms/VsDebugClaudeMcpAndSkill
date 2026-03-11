@@ -4,7 +4,6 @@
 
 $installDir   = "$env:USERPROFILE\.claude\VsBridge"
 $settingsDir  = "$env:USERPROFILE\.claude"
-$mcpFile      = "$settingsDir\.mcp.json"
 $skillsDir    = "$settingsDir\skills"
 $exePath      = "$installDir\VsBridge.exe"
 $csproj       = "$PSScriptRoot\VsBridge\VsBridge.csproj"
@@ -40,39 +39,21 @@ if (-not (Test-Path $skillsDir)) { New-Item -ItemType Directory -Force $skillsDi
 Copy-Item $skillSrc $skillDest -Force
 Write-Host "  Skill updated: $skillDest" -ForegroundColor Green
 
-# == Register in .mcp.json — the global MCP config Claude Code reads == //
-# Read existing config or start from an empty object
-if (Test-Path $mcpFile)
+# == Register MCP server globally via claude CLI == //
+# The claude mcp add command writes to ~/.claude.json (user scope),
+# making the server available in every Claude Code session.
+Write-Host "  Registering MCP server (user scope)..." -ForegroundColor Cyan
+claude mcp add --transport stdio --scope user vs-debugger -- $exePath 2>&1 | Out-Null
+
+if ($LASTEXITCODE -eq 0)
 {
-    $mcpConfig = Get-Content $mcpFile -Raw | ConvertFrom-Json
+    Write-Host "  MCP server registered globally" -ForegroundColor Green
 }
 else
 {
-    Write-Host "  No .mcp.json found, creating one..." -ForegroundColor Yellow
-    $mcpConfig = [PSCustomObject]@{}
+    Write-Host "  Warning: claude mcp add failed. Register manually:" -ForegroundColor Yellow
+    Write-Host "    claude mcp add --transport stdio --scope user vs-debugger -- `"$exePath`"" -ForegroundColor Yellow
 }
-
-# Add mcpServers node if missing
-if (-not ($mcpConfig.PSObject.Properties.Name -contains "mcpServers"))
-{
-    $mcpConfig | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
-}
-
-# Add or overwrite the vs-debugger entry
-$entry = [PSCustomObject]@{ command = $exePath; args = @() }
-if ($mcpConfig.mcpServers.PSObject.Properties.Name -contains "vs-debugger")
-{
-    $mcpConfig.mcpServers."vs-debugger" = $entry
-    Write-Host "  MCP entry updated in .mcp.json" -ForegroundColor Green
-}
-else
-{
-    $mcpConfig.mcpServers | Add-Member -NotePropertyName "vs-debugger" -NotePropertyValue $entry
-    Write-Host "  MCP entry added to .mcp.json" -ForegroundColor Green
-}
-
-# Write back with readable indentation
-$mcpConfig | ConvertTo-Json -Depth 10 | Set-Content $mcpFile -Encoding UTF8
 
 Write-Host ""
 Write-Host "  Done. Restart Claude Code to pick up changes." -ForegroundColor Green
