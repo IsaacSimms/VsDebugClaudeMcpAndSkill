@@ -2,7 +2,7 @@
   "mcpServers": {
     "vs-debugger": {
       "command": "dotnet",
-      "args": ["run", "--project", "VsBridge/VsBridge.csproj", "-c", "Release"]
+      "args": ["run", "--project", "VsBridge/VsBridge.csproj", "-c", "Release", "--no-build"]
     }
   }
 }

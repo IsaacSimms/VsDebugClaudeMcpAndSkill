@@ -5,8 +5,6 @@
       "mcp__vs-debugger__vs_set_breakpoint"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "vs-debugger"
-  ]
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": []
 }
